@@ -1,0 +1,24 @@
+11 june 2025 - Issue identifies at work.
+----------------------------------------
+
+Issue : OPENQUERY doesn't work inside a dynamic SQL string that you try to execute via EXEC(@sql) inside stored procedure.
+
+Error code : 
+
+create proc procedurename
+DECLARE @sql NVARCHAR(MAX)
+SET @sql = 'SELECT * FROM OPENQUERY(LINKEDSERVER, ''SELECT * FROM SomeTable'')'
+EXEC(@sql)
+
+----------
+Fix : 
+----------
+
+OPENQUERY needs to be outside of dynamic SQL for SQL Server to compile and execute it.
+If you’re building a stored procedure and need dynamic behavior with a linked server, try to parameterize only the inner SELECT, but write the actual OPENQUERY as a static string.
+
+correct code:
+
+create proc procedurename
+SELECT * 
+FROM OPENQUERY(LINKEDSERVER, 'SELECT * FROM SomeTable')
