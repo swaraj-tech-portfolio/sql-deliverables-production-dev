@@ -1,0 +1,40 @@
+SQL Toolkit by Scenario
+
+| Question Style                                              | What They Want                   | SQL Tool to Use                                    | Common Mistakes                                        |
+|-------------------------------------------------------------|----------------------------------|----------------------------------------------------|--------------------------------------------------------|
+| 🧮 "Total, average, count" per group                         | Aggregation                      | GROUP BY + aggregate functions like SUM(), COUNT() | Missing GROUP BY or grouping the wrong column          |
+| 📆 "Per month, per year, by quarter"                        | Time-series grouping             | DATEPART() or FORMAT() + GROUP BY                  | Grouping by full date instead of month/year            |
+| 🥇 "Top N", "Highest", "Lowest"                             | Ranking                          | ORDER BY + TOP or ROW_NUMBER()                     | Forgetting ORDER BY in TOP queries                     |
+| ⏱️ "Running totals", "Moving average", "Windowed stats"     | Row-by-row over time or category | SUM() OVER (PARTITION BY ... ORDER BY ...)         | Forgetting PARTITION BY (global instead of per group)  |
+| 📊 "First", "Last", "Nth" record per group                  | First/Last entry                 | ROW_NUMBER() or MIN/MAX with GROUP BY              | Wrong window function or over-complication             |
+| 🔍 "Exists in both", "Only in one"                          | Set comparison                   | INTERSECT, EXCEPT, or HAVING                       | Using IN() instead of comparing sets                   |
+| 📋 "All rows with extra info" (like totals beside each row) | Analytics + detail               | OVER() functions (e.g. SUM() OVER(...))            | Using GROUP BY instead — which removes row details     |
+| 🧠 "Slow query", "bad performance"                           | Performance tuning                | Index use, EXISTS, avoid scalar UDFs               | Using correlated subqueries, scalar UDFs, or bad joins |
+
+
+When to Use What – Based on Question Wording
+----------------------------------------------
+
+| If Question Says...                       | You Should Think Of...                     | Why                                                                  |
+|-------------------------------------------|--------------------------------------------|----------------------------------------------------------------------|
+| “Per customer, per product, per month…”   | GROUP BY                                   | You’re summarizing by a key                                          |
+| “Rank, Top 5, Highest spending…”          | ROW_NUMBER() / RANK() / DENSE_RANK()       | You’re filtering inside a group                                      |
+| “Each customer’s first/last activity”     | ROW_NUMBER() or MIN/MAX                    | MIN() if you only need a date, ROW_NUMBER() if you want the full row |
+| “Running total over time”                 | SUM() OVER (PARTITION BY ... ORDER BY ...) | Running totals track accumulation, not just a sum                    |
+| “Compare who bought from both categories” | HAVING COUNT(DISTINCT ...), INTERSECT      | You’re comparing subsets inside a group                              |
+| “Show total spent next to each order”     | SUM() OVER(PARTITION...)                   | You want detail + aggregate on the same row                          |
+| “Remove duplicates / bad data”            | ROW_NUMBER() + DELETE WHERE rn > 1         | Cleanup using window functions                                       |
+| “Filter rows based on subquery result”    | EXISTS, IN, JOIN, CTE                      | Depends on size, cardinality, and filtering logic                    |
+
+
+| Summary Cheatsheet            |
+|-------------------------------|
+| Task Type                     | Use                                           |
+| Summary per group             | GROUP BY                                      |
+| First/Last row in group       | ROW_NUMBER() + PARTITION BY + filter          |
+| Top N                         | ORDER BY + TOP N (with GROUP BY if needed)    |
+| Running total                 | SUM(...) OVER (PARTITION BY ... ORDER BY ...) |
+| Customers with X and Y        | HAVING COUNT(DISTINCT ...) = 2 or INTERSECT   |
+| Comparing groups              | EXISTS, NOT EXISTS, EXCEPT                    |
+| Attach aggregates to each row | Window function + OVER()                      |
+| Filter dupes / bad            | ROW_NUMBER() and DELETE WHERE rn > 1          |
