@@ -38,3 +38,17 @@ When to Use What – Based on Question Wording
 | Comparing groups              | EXISTS, NOT EXISTS, EXCEPT                    |
 | Attach aggregates to each row | Window function + OVER()                      |
 | Filter dupes / bad            | ROW_NUMBER() and DELETE WHERE rn > 1          |
+
+
+
+
+* 2nd highest order per customer  - ROW_NUMBER()
+* Latest order full row  - ROW_NUMBER()
+* Products never ordered - NOT EXISTS
+* Top 5 customers - TOP N with ORDER BY
+* Remove dupes, keep latest - CTE + ROW_NUMBER()
+* Trending analysis, compare previous rows  - LEAD() / LAG()
+* Advanced tree-like data, org charts - Recursive CTEs
+* More flexible than joins in some cases - CROSS APPLY / OUTER APPLY
+
+
