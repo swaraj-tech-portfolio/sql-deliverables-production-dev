@@ -1,0 +1,163 @@
+Problem : ODBC query showing timeout error ..
+
+DECLARE @lastmodifieddate VARCHAR(10)
+SET @lastmodifieddate = CONVERT(VARCHAR(10), CAST(GETDATE() - 10 AS DATE), 23)
+
+DECLARE @TSQL NVARCHAR(MAX)
+
+SET @TSQL = '
+SELECT
+    CONVERT(VARCHAR(10), CAST(date AS DATE), 101) AS [Date],
+    RecordType,
+    ISNULL(tranid, '''') AS [Document Number],
+    ISNULL(subsidiary, '''') AS Subsidiary,
+    ISNULL(geography, '''') AS [Geography],
+    ISNULL(classification, '''') AS Classification,
+    CAST(ISNULL(Amount, 0) AS DECIMAL(18, 2)) AS Amount,
+    ISNULL(Currency, '''') AS Currency,
+    ISNULL(memo, '''') AS Memo,
+    lineno,
+    ISNULL(accountnumber, '''') AS AccountNumber,
+    ISNULL(Period, '''') AS Period,
+    ISNULL(DateCreated, '''') AS DateCreated,
+    ISNULL(InternalID, '''') AS InternalID,
+    CustomerID,
+    custbody_externalidentifier,
+    foreignamountunpaid,
+    foreignpaymentamountunused,
+    foreignpaymentamountused,
+    custbody_gbt_sourcesystemscript,
+    custbody_sourcesystem_identifier,
+    lastmodifieddate
+
+FROM OPENQUERY(NETSUITE_EGP, ''
+    SELECT
+        CONVERT(DATE, trn.createddate) AS DateCreated,
+        trn.id AS InternalID,
+        rectype AS RecordType,
+        trn.tranid,
+        ebp.externalid AS subsidiary,
+        custbody_externalidentifier,
+        cl.fullname AS classification,
+        trn.foreignamountunpaid,
+        trn.foreignpaymentamountunused,
+        trn.foreignpaymentamountused,
+        act.externalid AS accountnumber,
+        trn.memo,
+        lineno,
+        trn.amount,
+        fop.type AS fop,
+        trn.tranid AS tranid,
+        cn.name AS Currency,
+        trn.trandate AS Date,
+        ap.enddate AS postingperiod,
+        custbody_externalidentifier,
+        custbody_gbt_sourcesystemscript,
+        custbody_sourcesystem_identifier,
+        trn.lastmodifeddate,
+        trn.customer AS CustomerID
+    FROM transaction trn
+    JOIN transactionline tl ON trn.id = tl.transaction
+    JOIN transactionaccountingline tal ON tal.transaction = trn.id AND tal.transactionline = tl.id
+    JOIN accountingperiod ap ON ap.id = tal.postingperiod AND ap.isposting = ''T'' AND accountingbook = 1
+    JOIN account act ON tal.account = act.id AND act.type != ''AcctRec''
+    LEFT JOIN currency cn ON cn.id = trn.currency
+    LEFT JOIN entity ebp ON trn.subsidiary = ebp.id
+    LEFT JOIN class cl ON tl.class = cl.id
+    WHERE trn.tranid NOT IN (''4602'', ''4616'')
+      AND act.externalid = ''052400''
+      AND trn.lastmodifeddate >= ''''' + @lastmodifieddate + '''''
+'')'
+
+EXEC(@TSQL)
+
+
+
+
+solution: Split the Date Range into Smaller Batches | 
+Since BETWEEN can’t be used dynamically in this OPENQUERY string (and is complex to escape), simulate date ranges by running the query one day at a time and unioning the results
+
+✅ Why it helps: Each day's data is smaller, so NetSuite query won't time out. This can avoid loading large volumes in a single execution.
+
+
+DECLARE @i INT = 0
+DECLARE @daysBack INT = 10
+DECLARE @SQL NVARCHAR(MAX) = ''
+DECLARE @dateStr VARCHAR(10)
+
+WHILE @i < @daysBack
+BEGIN
+    SET @dateStr = CONVERT(VARCHAR(10), DATEADD(DAY, -@i, GETDATE()), 23)
+
+    SET @SQL += '
+    SELECT
+        CONVERT(VARCHAR(10), CAST(date AS DATE), 101) AS [Date],
+        RecordType,
+        ISNULL(tranid, '''') AS [Document Number],
+        ISNULL(subsidiary, '''') AS Subsidiary,
+        ISNULL(geography, '''') AS [Geography],
+        ISNULL(classification, '''') AS Classification,
+        CAST(ISNULL(Amount, 0) AS DECIMAL(18, 2)) AS Amount,
+        ISNULL(Currency, '''') AS Currency,
+        ISNULL(memo, '''') AS Memo,
+        lineno,
+        ISNULL(accountnumber, '''') AS AccountNumber,
+        ISNULL(Period, '''') AS Period,
+        ISNULL(DateCreated, '''') AS DateCreated,
+        ISNULL(InternalID, '''') AS InternalID,
+        CustomerID,
+        custbody_externalidentifier,
+        foreignamountunpaid,
+        foreignpaymentamountunused,
+        foreignpaymentamountused,
+        custbody_gbt_sourcesystemscript,
+        custbody_sourcesystem_identifier,
+        lastmodifeddate
+
+    FROM OPENQUERY(NETSUITE_EGP, ''
+        SELECT
+            CONVERT(DATE, trn.createddate) AS DateCreated,
+            trn.id AS InternalID,
+            rectype AS RecordType,
+            trn.tranid,
+            ebp.externalid AS subsidiary,
+            custbody_externalidentifier,
+            cl.fullname AS classification,
+            trn.foreignamountunpaid,
+            trn.foreignpaymentamountunused,
+            trn.foreignpaymentamountused,
+            act.externalid AS accountnumber,
+            trn.memo,
+            lineno,
+            trn.amount,
+            fop.type AS fop,
+            trn.tranid AS tranid,
+            cn.name AS Currency,
+            trn.trandate AS Date,
+            ap.enddate AS postingperiod,
+            custbody_externalidentifier,
+            custbody_gbt_sourcesystemscript,
+            custbody_sourcesystem_identifier,
+            trn.lastmodifeddate,
+            trn.customer AS CustomerID
+        FROM transaction trn
+        JOIN transactionline tl ON trn.id = tl.transaction
+        JOIN transactionaccountingline tal ON tal.transaction = trn.id AND tal.transactionline = tl.id
+        JOIN accountingperiod ap ON ap.id = tal.postingperiod AND ap.isposting = ''''T'''' AND accountingbook = 1
+        JOIN account act ON tal.account = act.id AND act.type != ''''AcctRec''''
+        LEFT JOIN currency cn ON cn.id = trn.currency
+        LEFT JOIN entity ebp ON trn.subsidiary = ebp.id
+        LEFT JOIN classification cl ON tl.class = cl.id
+        WHERE trn.tranid NOT IN (''''4602'''', ''''4616'''')
+          AND act.externalid = ''''052400''''
+          AND trn.lastmodifeddate = ''''' + @dateStr + '''''
+    '')'
+
+    IF @i < @daysBack - 1
+        SET @SQL += ' UNION ALL '
+
+    SET @i += 1
+END
+
+-- Execute the full batch query
+EXEC sp_executesql @SQL
