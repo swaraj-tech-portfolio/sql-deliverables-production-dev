@@ -1,0 +1,112 @@
+✅ Your Goal:
+Show the average delivery time, total number of shipments, and total weight shipped by each carrier from the Shipments table.
+
+🎯 Aggregation + GROUP BY
+
+SELECT 
+    Carrier,                          
+    AVG(DeliveryTime) AS AvgDeliveryTime,
+    COUNT(*) AS TotalShipments,
+    SUM(Weight) AS TotalWeight
+FROM Shipments
+GROUP BY Carrier;
+
+✅ Your Goal:
+
+From the Employees table, find the top 2 highest paid employees in each department.
+
+🎯 Ranking in groups (ROW_NUMBER)
+
+SELECT *
+FROM (
+    SELECT 
+        EmployeeName,
+        Department,
+        Salary,
+        ROW_NUMBER() OVER(PARTITION BY Department ORDER BY Salary DESC) AS rn
+    FROM Employees
+) AS ranked
+WHERE rn <= 2;
+
+
+✅ Your Goal:
+Return the most recent payment for each invoice from the Payments table.
+
+🎯 Latest row per group
+
+WITH CTE AS (
+   SELECT 
+       PaymentID,
+       InvoiceID,
+       PaymentDate,
+       Amount,
+       RANK() OVER (PARTITION BY InvoiceID ORDER BY PaymentDate DESC) AS rnk
+   FROM Payments
+)
+SELECT *
+FROM CTE
+WHERE rnk = 1;
+
+🔍 When to Use RANK() vs ROW_NUMBER()?
+Function	Use When...
+ROW_NUMBER()	You want only one record per group
+RANK()	You want to include ties (e.g., multiple same-date payments)
+
+
+✅ Your Goal:
+Calculate how long (in minutes) each call lasted using CallStartTime and CallEndTime in the CallLogs table.
+
+🎯 DATEDIFF between timestamps 
+No GROUP BY needed because You're not aggregating data, just calculating duration per row ( — it's a row-wise calculation)
+
+SELECT 
+    CallID,
+    CallStartTime, 
+    CallEndTime, 
+    DATEDIFF(MINUTE, CallStartTime, CallEndTime) AS CallDurationMinutes
+FROM CallLogs;
+
+✅ Your Goal: 
+Find all products that have never been ordered from the Products and OrderDetails tables.
+🎯 Anti-join
+
+SELECT 
+    P.ProductID, 
+    P.ProductName 
+FROM Products P
+LEFT JOIN OrderDetails O 
+    ON P.ProductID = O.ProductID
+WHERE O.ProductID IS NULL;
+
+explanation: 
+LEFT JOIN	Keep all products, even if no match in OrderDetails
+WHERE O.ProductID IS NULL	Filters only those products that have no order
+This is called an anti-join	Very common in real-world ETL and reporting queries
+
+✅ Your Goal: 
+Detect duplicate customer records in the Customers table based on Name and Email.
+🎯 duplicate detection
+
+SELECT COUNT(CustomerID), Name, Email
+FROM Customers
+GROUP BY Name, Email
+HAVING COUNT(CustomerID) > 1;
+
+🧪 Bonus: Show Full Duplicate Rows (with CustomerID)
+
+-- Step 1: Find duplicate keys
+WITH DuplicateKeys AS (
+    SELECT Name, Email
+    FROM Customers
+    GROUP BY Name, Email
+    HAVING COUNT(*) > 1
+)
+-- Step 2: Join back to show full rows
+SELECT C.CustomerID, C.Name, C.Email
+FROM Customers C
+JOIN DuplicateKeys D
+  ON C.Name = D.Name AND C.Email = D.Email;
+
+🔍 When to Use GROUP BY vs CTE + JOIN?
+🎯  Just see duplicates by key	✅ GROUP BY ... HAVING COUNT(*) > 1
+🎯  See full duplicate rows   	✅ Use CTE + JOIN
