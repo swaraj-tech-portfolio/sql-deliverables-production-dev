@@ -1,0 +1,67 @@
+✅ Problem Statement:  Using Dynamic SQL for NetSuite Search-Based Automation
+
+“In my current project, we built dynamic SQL logic to fetch data from NetSuite saved searches and generate reports automatically.
+Since report structures were dynamic (columns, filters, dates changed often), we had to generate queries at runtime.”
+
+✅ Challenge 1: Dynamic Filter Conditions
+Some reports needed different filters — like Date range, Region, Status, etc.
+
+🛠 What I Did:
+Built SQL like:
+
+DECLARE @SQL NVARCHAR(MAX) = N''
+SET @SQL = '
+SELECT CustomerName, InvoiceDate, Amount
+FROM NetSuite_Sales
+WHERE 1=1'
+
+IF @Region IS NOT NULL
+    SET @SQL += ' AND Region = ''' + @Region + ''''
+
+IF @StartDate IS NOT NULL AND @EndDate IS NOT NULL
+    SET @SQL += ' AND InvoiceDate BETWEEN ''' + @StartDate + ''' AND ''' + @EndDate + ''''
+
+EXEC sp_executesql @SQL
+
+✅  Challenge 2: SQL Injection Risk
+Since values came from user inputs or config tables, we had to protect against injection.
+
+🛠 What I Did:
+Used sp_executesql with parameters:
+
+DECLARE @sql NVARCHAR(MAX)
+SET @sql = '
+SELECT * FROM NetSuite_Sales 
+WHERE Region = @region AND Status = @status'
+
+EXEC sp_executesql @sql, 
+     N'@region NVARCHAR(50), @status NVARCHAR(50)', 
+     @region = @Region, @status = @Status
+
+✅  Challenge 3: Dynamic Columns Based on Saved Search Metadata
+Some reports allowed dynamic columns from saved searches (NetSuite metadata table stored columns).
+
+🛠 What I Did:
+Read column names from metadata/config table
+Constructed SELECT statement using STRING_AGG() (in SQL Server 2017+):
+
+DECLARE @cols NVARCHAR(MAX)
+SELECT @cols = STRING_AGG(ColumnName, ', ') FROM SavedSearchColumns WHERE SearchID = @ReportID
+
+DECLARE @sql NVARCHAR(MAX)
+SET @sql = 'SELECT ' + @cols + ' FROM NetSuiteData WHERE SearchID = ' + CAST(@ReportID AS NVARCHAR)
+EXEC (@sql)
+
+✅ Challenge 4: Hard to Debug Dynamic SQL Errors
+When dynamic SQL failed, the error was unclear or hard to trace.
+
+🛠 What I Did:
+Logged generated SQL into a table for debugging:
+
+INSERT INTO SQL_Log (ReportName, GeneratedSQL, CreatedOn)
+VALUES (@ReportName, @sql, GETDATE())
+This helped us replay the exact SQL for any issue.
+
+“In my current project, We automate NetSuite reports using dynamic SQL — since report filters and columns change often, we build queries at runtime.
+I’ve handled challenges like conditional filters, SQL injection risks, dynamic column selection, and debugging by logging generated SQL.
+I use sp_executesql to keep it safe and flexible, and we store column metadata in config tables so reports stay dynamic.”
