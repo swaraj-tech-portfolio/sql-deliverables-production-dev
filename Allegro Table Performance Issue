@@ -1,0 +1,55 @@
+✅ Allegro Table Performance Issue
+
+“In one of our Allegro processes, we had a huge table — it had billions of rows, and it was being updated 
+and inserted by two systems at the same time.
+
+One of our procedures started running very slow — up to 2-3 hours, especially when both systems triggered together.”
+
+✅ What I Found:
+
+The query was filtering like:
+WHERE Status = 'Pending' AND CreatedDate >= GETDATE() - 2
+
+But this table had no proper index to support that filter.
+Because of that, the query was scanning the full table, and since both systems were updating, it caused blocking and locks too.
+
+🛠 What I Changed (Fixes I Did):
+
+✅Added a filtered index:
+
+On the exact condition used — Status and CreatedDate:
+
+CREATE NONCLUSTERED INDEX IX_Pending_Status
+ON AllegroTable (Status, CreatedDate)
+WHERE Status = 'Pending';
+
+That helped SQL narrow down the rows fast.
+
+✅Added batching in the update:
+
+Instead of updating everything at once, I used TOP (5000) in a loop:
+
+WHILE 1 = 1
+BEGIN
+    UPDATE TOP (5000) AllegroTable
+    SET ...
+    WHERE Status = 'Pending' AND CreatedDate >= GETDATE() - 2;
+
+    IF @@ROWCOUNT = 0 BREAK;
+END
+That reduced lock time and gave other processes a chance to run.
+
+✅Moved the job timing:
+
+I noticed both systems were updating the same table at the same time, so I changed one job by 15 minutes — that really helped reduce locking.
+
+✅ Final Outcome:
+“After these 3 changes — index, batching, and timing —
+The procedure that was taking 2-3 hours came down to just 15 minutes.
+No more deadlocks, no more blocking, and CPU usage dropped significantly.”
+
+Final One-Liner Summary :
+
+“The table had no index on the filter column, and both systems were updating together.
+I added a filtered index, batched the update, and adjusted the job time.
+That reduced the time from 3 hours to 15 min.
