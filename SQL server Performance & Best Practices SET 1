@@ -1,12 +1,7 @@
-
+********Best Practices******** 
 
 1. COUNT(*) counts all rows including NULLs.
 2. TRUNCATE removes all rows but keeps structure & resets identity (faster than DELETE).
-3. Differences between truncate and delete
-
-DELETE can be filtered using WHERE, logs each row deletion, and retains identity values.
-TRUNCATE removes all rows instantly, resets identity, and is not logged row by row.
-
 4. A covering index contains all columns needed by the query to avoid extra reads.
 5. Table variables do participate in transactions, and can have PRIMARY KEY and UNIQUE.
 6. Default isolation level in SQL Server is Read Committed
