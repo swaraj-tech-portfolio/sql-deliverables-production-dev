@@ -1,0 +1,60 @@
+| ✅ SQL Optimization & Update Case Study – AMOSStg + NFPtxnStg                                                                                           |
+|--------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 🔍 Problem Statement                                                                                                                                   |
+| I needed to update records in a large SQL Server table AMOSStg, where:                                                                                 |
+| Netsuite = 'N' or NULL (i.e., not processed)                                                                                                           |
+| Join with NFPtxnStg to get TranID                                                                                                                      |
+| Match with AMOS_MarketCodes for SourceCategory = 'AMOSEgencia'  
+|
+| Then update AMOSStg:                                                                                                                                   |
+| Netsuite = 'Y'                                                                                                                                         |
+| NetsuiteDocument = NFP.TranID                                                                                                                          |
+| ---                                                                                                                                                    |
+| ⚠️ Performance Issue                                                                                                                                   |
+| The base query was slow because:                                                                                                                       |
+| ISNULL(Netsuite, '') = 'N' is non-sargable (prevents index seek)                                                                                       |
+| Query scanned crores of rows from AMOSStg and NFPtxnStg                                                                                                |
+| Even fetching 100 rows took 12–14 seconds (due to full scans and large joins)                                                                          |
+| ---                                                                                                                                                    |
+| 🛠️ Fix Applied (Step-by-Step)                                                                                                                         |
+| ✅ 1. Created a Computed Column                                                                                                                         |
+| ALTER TABLE AMOSStg                                                                                                                                    |
+| ADD Netsuite_flag AS (CASE WHEN ISNULL(Netsuite, '') = 'N' THEN 1 ELSE 0 END) PERSISTED;                                                               |
+| ✅ 2. Created a Filtered Temp Table                                                                                                                     |
+| SELECT * INTO #temp                                                                                                                                    |
+| FROM AMOSStg                                                                                                                                           |
+| WHERE Netsuite_flag = 1;                                                                                                                               |
+| ✅ 3. Added Indexes to Speed Up Joins                                                                                                                   |
+| CREATE NONCLUSTERED INDEX IX_temp_CleanPNR ON #temp (CleanPNR);                                                                                        |
+| CREATE NONCLUSTERED INDEX IX_temp_CleanMarket ON #temp (CleanMarket);                                                                                  |
+| CREATE NONCLUSTERED INDEX IX_NFP_CleanPNR_SubName ON NFPtxnStg (CleanPNR, SubName);                                                                    |
+| ✅ 4. Verified Join Logic with TOP 100 Test and SET STATISTICS IO/TIME ON                                                                               |
+| This showed that although filtering worked, execution plan still scanned millions of rows, so we used a #temp to isolate and reduce AMOS volume early. |
+| ---                                                                                                                                                    |
+| ✅ 5. Final Update Query – Apply Back to AMOSStg                                                                                                        |
+| UPDATE A                                                                                                                                               |
+| SET                                                                                                                                                    |
+|     A.Netsuite = 'Y',                                                                                                                                  |
+|     A.NetsuiteDocument = NFP.TranID                                                                                                                    |
+| FROM dbo.AMOSStg A                                                                                                                                     |
+| JOIN #temp T ON A.CleanPNR = T.CleanPNR                                                                                                                |
+| JOIN NFPtxnStg NFP ON T.CleanPNR = NFP.CleanPNR                                                                                                        |
+| JOIN AMOS_MarketCodes M                                                                                                                                |
+|      ON T.CleanMarket = M.marketcode                                                                                                                   |
+|     AND M.SourceCategory = 'AMOSEgencia'                                                                                                               |
+| WHERE                                                                                                                                                  |
+|     NFPMarketCode = NFP.SubName                                                                                                                        |
+|     AND T.CleanPNR IS NOT NULL                                                                                                                         |
+|     AND NFP.CleanPNR IS NOT NULL;                                                                                                                      |
+| ---                                                                                                                                                    |
+| 📈 Result                                                                                                                                              |
+| Reduced query time significantly (from 1+ minute to 12–15 seconds)                                                                                     |
+| Avoided full table scan by filtering and indexing early                                                                                                |
+| Ensured controlled and efficient update using proper join keys                                                                                         |
+| ---                                                                                                                                                    |
+| 🧠 Key Takeaways                                                                                                                                       |
+| Technique                                                                                                                                              | Benefit                                 |
+| Computed column (Netsuite_flag)                                                                                                                        | Made filter sargable                    |
+| Temp table (#temp)                                                                                                                                     | Materialized filtered data early        |
+| Indexes on join keys                                                                                                                                   | Reduced scan, improved join performance |
+| Joining back to AMOSStg                                                                                                                                | Safely updated only relevant rows       |
