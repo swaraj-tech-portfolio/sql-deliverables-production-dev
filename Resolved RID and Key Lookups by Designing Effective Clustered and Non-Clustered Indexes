@@ -1,0 +1,72 @@
+✅ Real-Time Issue You Faced
+Problem Statement: I observed performance issues in a query — execution plan showed RID Lookups. 
+The table had no clustered index, and was functioning as a heap.
+
+✅Root Cause Analysis
+
+In SQL Server, a heap (table without a clustered index) stores rows without logical ordering. Any non-clustered index (NCI)  needs to locate rows using a RID (Row ID) — which is a physical pointer.
+
+This leads to: RID Lookup = costly row-by-row retrieval using physical location
+
+Slower performance, especially for large tables or frequent lookups
+
+🛠️ How I Solved It — Step-by-Step
+
+✅ Step 1: Identify Lookup Cause : Used Actual Execution Plan in SSMS
+
+Found RID Lookup under key operator (Nested Loop or Key Lookup)
+
+Verified: No Clustered Index on table (heap structure)
+
+✅ Step 2: Created a Clustered Index
+
+To eliminate RID Lookups, I created a Clustered Index on a meaningful column — ID:
+
+CREATE CLUSTERED INDEX CI_NFPTxnStg_ID
+ON NFPTxnStg (ID);
+
+🔄 Result:
+Table structure changed from Heap ➝ Clustered Table
+RID Lookups disappeared
+Remaining lookups became Key Lookups (logical & faster)
+
+❓ But I Still Saw Key Lookups
+
+Root Cause:
+The Non-Clustered Index used by the query didn’t include all selected columns.
+
+-- Query needs columns not in index:
+
+SELECT CleanENR, CleanInvoiceNumber, UpdateNetSuite, Amount, Status
+FROM NFPTxnStg
+WHERE CleanENR = 'E123' AND CleanInvoiceNumber = 'INV987';
+
+But NCI was:
+CREATE NONCLUSTERED INDEX IX_Example
+ON NFPTxnStg (CleanENR, CleanInvoiceNumber);
+
+✅ Fix:
+
+I altered the NCI to include the missing columns using INCLUDE clause:
+
+CREATE NONCLUSTERED INDEX IX_Example
+ON NFPTxnStg (CleanENR, CleanInvoiceNumber)
+INCLUDE (UpdateNetSuite, Amount, Status);
+
+🔄 Result:
+Fully covered index
+Key Lookups eliminated
+Performance improved significantly
+
+🧠 What I Learned and Applied
+
+Concept	Action I Took
+RID Lookups on Heap	Created Clustered Index
+Key Lookup after CI	Used INCLUDE in NCI to avoid lookup
+Execution Plan Analysis	Traced source of lookups and resolved precisely
+Index Tuning Best Practice	Combined filtering columns + include columns
+
+📈 Real-Time Impact
+Reduced logical reads from 200,000 ➝ 2,000 (example case)
+Execution time improved from ~3.5 sec ➝ 150 ms
+Query plan moved from Nested Loops + RID Lookup ➝ Seek only
