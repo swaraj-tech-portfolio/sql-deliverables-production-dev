@@ -1,0 +1,18 @@
+Problem : In a csv file , comma separated columns with comma in amount field. 
+
+csv source file:
+
+Transtype, Airline_code,Ticket_number,Base_fare, Amount
+ABC,298723,9645363748," 19,854.00"," 2,700.00"
+ABC,298724,9645363749," 29,854.00"," 2,800.20"
+
+Fix In flatfile source :
+
+format: delimited
+Text Qualifier : "
+
+output:
+
+Transtype, Airline_code,Ticket_number,Base_fare, Amount
+ABC 298723 9645363748 19,854.00 2,700.00
+ABC 298724 9645363749 29,854.00 2,800.20
