@@ -1,0 +1,65 @@
+**requirement is to show YTD (Year-to-Date) for each month (Feb = Jan+Feb, Mar = Jan+Feb+Mar … Dec = sum of all 12 months).
+
+To calculate YTD (cumulative sum month by month), you can use a window function like this:
+
+select 
+    filename as [Scenario],
+    isnull([Fiscal Year], '') as [Year],
+    [Fiscal Month] as [Month],
+    Case when act.[Rollup Level 3 Code] = 'Gross_Transactions'
+         then 'Gross Transactions'
+         when act.[Rollup Level 3 Code] = 'Total Transactions'
+         then 'Net Transactions'
+    end as [Group],
+    act.[Rollup Level 3 Code],
+    act.[Account] as [Account],
+    Subsidiary as [Subsidiary],
+    [Function] as [Function],
+    [Geography] as [Geography],
+    replace(isnull(client,'NULL'),'NULL','') as client,
+    Case when [Entered Currency] = 'USD' 
+         then 'USD' 
+         else [Currency End] 
+    end as [Currency],
+    Case when act.[Rollup Level 3 Code] = 'Total Transactions' 
+         or act.[Rollup Level 3 Code] = 'Net Transactions'
+         then act.[Traffic Type] 
+         else 'Default' 
+    end as [Product],
+    LOB as [LOB],
+    Amount as [Amount],
+
+    --  YTD Amount calculation
+    SUM(Amount) OVER (
+        PARTITION BY filename, [Fiscal Year], act.[Rollup Level 3 Code], act.[Account]
+        ORDER BY [Fiscal Month]
+        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) as [YTD_Amount]
+
+from Planful_RWF1_stg act
+join SubsidiaryLevelBased subsby on act.Subsidiary=subsby.[Leaf Code]
+join AccountLevelBased accnt on act.[Rollup Level 2 Code] = accnt.[Leaf Code]
+
+
+
+Explanation:
+
+SUM(Amount) OVER (...) → makes a running total.
+
+PARTITION BY → resets the YTD at each Scenario, Year, Account, and Rollup Code.
+
+ORDER BY [Fiscal Month] → ensures Jan (1) adds first, then Feb (2), etc.
+
+ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW → includes all rows up to the current month = YTD.
+
+So:
+
+Jan (Month=1) → just Jan amount.
+
+Feb (Month=2) → Jan + Feb.
+
+Mar (Month=3) → Jan + Feb + Mar.
+
+…
+
+Dec (Month=12) → all 12 months.
