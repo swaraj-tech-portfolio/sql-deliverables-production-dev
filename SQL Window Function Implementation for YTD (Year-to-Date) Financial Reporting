@@ -1,0 +1,138 @@
+✅ Task Summary (Business-Level)
+We were given a dataset of monthly financial transactions with an Amount column stored as varchar. 
+The requirement was:
+Each record represents a monthly amount for a given account, subsidiary, product, and other attributes.
+We needed to show YTD (Year-to-Date) values for each month:
+Feb = Jan + Feb, Mar = Jan + Feb + Mar, ... Dec = all 12 months.
+Keep original monthly amount but also display a running total (YTD_Amount) for reporting purposes.
+
+
+✅Solutions:
+
+SELECT 
+    filename AS [Scenario],
+    ISNULL([Fiscal Year], '') AS [Year],
+    [Fiscal Month] AS [Month],
+
+    CASE 
+        WHEN act.[Rollup Level 3 Code] = 'Gross_Transactions' THEN 'Gross Transactions'
+        WHEN act.[Rollup Level 3 Code] = 'Total Transactions' THEN 'Net Transactions'
+    END AS [Group],
+
+    act.[Rollup Level 3 Code],
+    act.[Account] AS [Account],
+    Subsidiary AS [Subsidiary],
+    [Function] AS [Function],
+    [Geography] AS [Geography],
+    REPLACE(ISNULL(client,'NULL'),'NULL','') AS Client,
+
+    CASE 
+        WHEN [Entered Currency] = 'USD' THEN 'USD' 
+        ELSE [Currency End] 
+    END AS [Currency],
+
+    CASE 
+        WHEN act.[Rollup Level 3 Code] IN ('Total Transactions', 'Net Transactions')
+            THEN act.[Traffic Type] 
+        ELSE 'Default' 
+    END AS [Product],
+
+    LOB AS [LOB],
+
+    -- Convert varchar Amount to decimal for calculations
+    TRY_CAST(Amount AS DECIMAL(18,2)) AS [Amount],
+
+    -- YTD (Year-to-Date) calculation using window function
+    SUM(TRY_CAST(Amount AS DECIMAL(18,2))) OVER (
+        PARTITION BY filename, [Fiscal Year], act.[Rollup Level 3 Code], act.[Account]
+        ORDER BY [Fiscal Month]
+        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS [YTD_Amount]
+
+FROM Planful_RWF1_stg act
+JOIN SubsidiaryLevelBased subsby 
+    ON act.Subsidiary = subsby.[Leaf Code]
+JOIN AccountLevelBased accnt 
+    ON act.[Rollup Level 2 Code] = accnt.[Leaf Code];
+
+
+
+✅Step-by-Step Explanation
+
+1. Data Context
+
+The table Planful_RWF1_stg stores monthly transaction-level data.
+
+Columns include Filename (Scenario), Fiscal Year, Fiscal Month, Account, Amount, etc.
+
+Amount was stored as varchar, so calculations couldn’t be done directly.
+
+2. Business Requirement
+
+We needed to transform this raw monthly data into a report-friendly dataset that includes:
+
+Monthly Amount → The numeric value for that month.
+
+YTD Amount → A cumulative running total for all months in that year.
+
+3. Fix: Amount Conversion
+
+We used TRY_CAST(Amount AS DECIMAL(18,2)) to safely convert varchar to a numeric format:
+
+CAST would fail if non-numeric data existed.
+
+TRY_CAST gracefully returns NULL for invalid values.
+
+4. Window Function for YTD
+
+We used:
+
+SUM(TRY_CAST(Amount AS DECIMAL(18,2))) OVER (
+    PARTITION BY filename, [Fiscal Year], act.[Rollup Level 3 Code], act.[Account]
+    ORDER BY [Fiscal Month]
+    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+) AS [YTD_Amount]
+
+
+PARTITION BY: Restarts the calculation for each Scenario-Year-Account combination.
+
+ORDER BY Fiscal Month: Ensures we add months in order (Jan=1, Feb=2...).
+
+ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW: Includes all rows from the start of the year to the current row → cumulative sum.
+
+5. Business Value
+
+Enables finance teams to see monthly and cumulative totals without manual calculation.
+
+Essential for trend analysis, dashboards, and executive summaries.
+
+Query is now ETL-ready for reporting tools like Tableau, Power BI, or Planful.
+
+
+✅Challenge:
+
+Amount column was in varchar.
+
+Needed a running total (YTD) by month, account, and year.
+
+Approach:
+
+✅Used TRY_CAST to safely handle numeric conversion.
+
+Applied Window Functions (SUM OVER) for efficient cumulative calculations.
+
+Grouped data logically using PARTITION BY.
+
+✅Why Window Functions:
+
+Much faster and cleaner than GROUP BY with subqueries.
+
+Eliminates need for multiple joins or temp tables.
+
+Easy to add more analytical columns (e.g., MTD, QTD).
+
+✅Performance Consideration:
+
+Ensure Fiscal Year, Fiscal Month, and Account are indexed.
+
+Proper datatype conversion improves performance over varchar math.
