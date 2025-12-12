@@ -1,0 +1,168 @@
+Implementation date : 12 dec 2025
+
+
+***SSIS CSV Export Cleanup & UTF-8 Transformation – Case Study***
+
+
+
+This project involved building a stable CSV export pipeline using SSIS.
+The requirement was simple on paper: extract data from SQL Server and generate a clean UTF-8 CSV that another system could load daily.
+
+In reality, the data contained several formatting issues that caused the CSV loader to reject records.
+Below is a summary of the problems we faced and how we fixed them.
+
+---------------------
+ Project Summary
+----------------------
+
+We developed an SSIS package to:
+
+Read data from SQL Server
+
+Clean and normalize text fields
+
+Export the file as UTF-8 encoded CSV
+
+Ensure the file meets RFC-compliant CSV formatting rules
+
+Guarantee 0 malformed rows for downstream processing
+
+------------------------------
+ Key Challenges & Solutions
+------------------------------
+1. UTF-8 Encoding Was Not Applied Correctly
+--------------------------------------------
+
+Issue
+-----
+
+SSIS Flat File Destination generates ANSI files by default.
+As a result, characters like ä, é, ö, å, and other accented/Unicode characters became garbled.
+
+Fix
+---
+
+Converted all DT_STR columns to DT_WSTR (Unicode)
+
+Set the Flat File Connection to UTF-8 (65001)
+
+Ensured downstream systems correctly interpreted the file as UTF-8
+
+Result
+------
+
+All international characters were preserved exactly as expected.
+
+2. Hidden Line Feed (LF) & Carriage Return (CR) Characters
+----------------------------------------------------------
+
+Issue
+-----
+
+Some text fields contained hidden \n and \r characters.
+When exported, these caused rows to split across multiple lines and break the CSV structure.
+
+Fix
+-----
+
+Used a Derived Column transformation:
+
+REPLACE(REPLACE(TRIM([Column]), "\r", ""), "\n", "")
+
+Result
+-------
+
+Each record appeared on a single line.
+No accidental line breaks.
+CSV loader stopped rejecting records.
+
+3. Unescaped Double Quotes Inside Text
+--------------------------------------
+
+Issue
+-------
+
+Some text fields contained double quotes such as:
+
+Preliminär hotellkostnad Telia "MLE"
+
+
+In CSV format, internal quotes must be escaped, otherwise the parser thinks the field ends early.
+This caused column misalignment and record failures.
+
+Fix
+----
+
+Implemented proper CSV escaping:
+
+REPLACE([Column], "\"", "\"\"")
+
+Result
+----------
+
+All inner quotes were converted from:
+
+"MLE"
+
+
+to:
+
+""MLE""
+
+
+which is the correct, standards-compliant CSV format.
+
+4. Fields With Only Spaces Were Not Treated as Empty
+----------------------------------------------------
+
+Issue
+-----
+
+Certain fields contained blank spaces " " instead of empty strings.
+These were treated as valid data, causing validation mismatches.
+
+Fix
+----
+
+Normalized such values:
+
+NULLIF(TRIM([Column]), '')
+
+Result
+------
+
+All “space-only” fields were converted into true empty values.
+Data consistency improved significantly.
+
+*************
+Final Outcome
+*************
+
+After implementing the above fixes:
+
+***The exported CSV was fully UTF-8 compliant
+
+***No malformed rows or broken lines
+
+***No double-quote parsing errors
+
+***Column counts remained perfectly aligned
+
+***Downstream system failures dropped to 0%
+
+***Pipeline became stable for long-term production use
+
+ 
+#################
+Technologies Used
+#################
+
+SSIS (SQL Server Integration Services)
+
+SQL Server
+
+Flat File Destination
+
+Derived Column Transformations
+
+UTF-8 Encoding (Codepage 65001)
